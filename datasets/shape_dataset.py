@@ -39,7 +39,7 @@ class SingleShapeDataset(Dataset):
     def __init__(self,
                  data_root, return_faces=True,
                  return_evecs=True, num_evecs=200,
-                 return_corr=True, return_dist=False):
+                 return_corr=True, return_dist=False, return_descr=False, descr_dir='descr'):
         """
         Single Shape Dataset
 
@@ -60,11 +60,14 @@ class SingleShapeDataset(Dataset):
         self.return_evecs = return_evecs
         self.return_corr = return_corr
         self.return_dist = return_dist
+        self.return_descr = return_descr
+        self.descr_dir = descr_dir
         self.num_evecs = num_evecs
 
         self.off_files = []
         self.corr_files = [] if self.return_corr else None
         self.dist_files = [] if self.return_dist else None
+        self.descr_files = [] if self.return_descr else None
 
         self._init_data()
 
@@ -77,6 +80,10 @@ class SingleShapeDataset(Dataset):
 
         if self.return_corr:
             assert self._size == len(self.corr_files)
+
+        
+        if self.return_descr:
+            assert self._size == len(self.descr_files)
 
     def _init_data(self):
         # check the data path contains .off files
@@ -96,6 +103,12 @@ class SingleShapeDataset(Dataset):
             assert os.path.isdir(dist_path), f'Invalid path {dist_path} not containing .mat files'
             self.dist_files = sort_list(glob(f'{dist_path}/*.mat'))
 
+        if self.return_descr:
+            descr_path = os.path.join(self.data_root, self.descr_dir)
+            assert os.path.isdir(descr_path), f'Invalid path {descr_path} not containing .pt files'
+            self.descr_files = sort_list(glob(f'{descr_path}/*.pt'))
+
+
     def __getitem__(self, index):
         item = dict()
 
@@ -103,6 +116,8 @@ class SingleShapeDataset(Dataset):
         off_file = self.off_files[index]
         basename = os.path.splitext(os.path.basename(off_file))[0]
         item['name'] = basename
+
+        print(f'LOADING: {index} -> {basename}')
 
         # get vertices and faces
         verts, faces = read_shape(off_file)
@@ -124,6 +139,10 @@ class SingleShapeDataset(Dataset):
             corr = np.loadtxt(self.corr_files[index], dtype=np.int32) - 1  # minus 1 to start from 0
             item['corr'] = torch.from_numpy(corr).long()
 
+        # get geodesic distance matrix
+        if self.return_descr:
+            item['descr'] = torch.load(self.descr_files[index], map_location=lambda storage, loc: storage)
+
         return item
 
     def __len__(self):
@@ -135,10 +154,10 @@ class SingleFaustDataset(SingleShapeDataset):
     def __init__(self, data_root,
                  phase, return_faces=True,
                  return_evecs=True, num_evecs=200,
-                 return_corr=True, return_dist=False):
+                 return_corr=True, return_dist=False, return_descr=False, descr_dir='descr'):
         super(SingleFaustDataset, self).__init__(data_root, return_faces,
                                                  return_evecs, num_evecs,
-                                                 return_corr, return_dist)
+                                                 return_corr, return_dist, return_descr, descr_dir)
         assert phase in ['train', 'test', 'full'], f'Invalid phase {phase}, only "train" or "test" or "full"'
         assert len(self) == 100, f'FAUST dataset should contain 100 human body shapes, but get {len(self)}.'
         if phase == 'train':
@@ -148,6 +167,8 @@ class SingleFaustDataset(SingleShapeDataset):
                 self.corr_files = self.corr_files[:80]
             if self.dist_files:
                 self.dist_files = self.dist_files[:80]
+            if self.descr_files:
+                self.descr_files = self.descr_files[:80]
             self._size = 80
         elif phase == 'test':
             if self.off_files:
@@ -156,6 +177,8 @@ class SingleFaustDataset(SingleShapeDataset):
                 self.corr_files = self.corr_files[80:]
             if self.dist_files:
                 self.dist_files = self.dist_files[80:]
+            if self.descr_files:
+                self.descr_files = self.descr_files[80:]
             self._size = 20
 
 
@@ -262,9 +285,9 @@ class SingleShrec20Dataset(SingleShapeDataset):
 class SingleTopKidsDataset(SingleShapeDataset):
     def __init__(self, data_root,
                  return_faces=True,
-                 return_evecs=True, num_evecs=200, return_dist=False):
+                 return_evecs=True, num_evecs=200, return_dist=False, return_descr=False, descr_dir='descr'):
         super(SingleTopKidsDataset, self).__init__(data_root, return_faces,
-                                                   return_evecs, num_evecs, False, return_dist)
+                                                   return_evecs, num_evecs, False, return_dist, return_descr, descr_dir)
 
 
 class PairShapeDataset(Dataset):
@@ -308,10 +331,10 @@ class PairFaustDataset(PairShapeDataset):
     def __init__(self, data_root,
                  phase, return_faces=True,
                  return_evecs=True, num_evecs=200,
-                 return_corr=True, return_dist=False):
+                 return_corr=True, return_dist=False, return_descr=False, descr_dir='descr'):
         dataset = SingleFaustDataset(data_root, phase, return_faces,
                                      return_evecs, num_evecs,
-                                     return_corr, return_dist)
+                                     return_corr, return_dist, return_descr, descr_dir)
         super(PairFaustDataset, self).__init__(dataset)
 
 
@@ -584,9 +607,10 @@ class PairTopKidsDataset(Dataset):
     def __init__(self, data_root, phase='train',
                  return_faces=True,
                  return_evecs=True, num_evecs=200,
-                 return_dist=False):
+                 return_dist=False,
+                 return_descr=False, descr_dir='descr'):
         assert phase in ['train', 'test'], f'Invalid phase: {phase}'
-        self.dataset = SingleTopKidsDataset(data_root, return_faces, return_evecs, num_evecs, return_dist)
+        self.dataset = SingleTopKidsDataset(data_root, return_faces, return_evecs, num_evecs, return_dist, return_descr, descr_dir)
         self.phase = phase
         if phase == 'test':
             corr_path = os.path.join(data_root, 'corres')

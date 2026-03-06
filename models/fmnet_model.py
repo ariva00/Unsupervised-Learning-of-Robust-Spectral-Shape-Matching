@@ -22,8 +22,8 @@ class FMNetModel(BaseModel):
         data_x, data_y = to_device(data['first'], self.device), to_device(data['second'], self.device)
 
         # feature extractor for mesh
-        feat_x = self.networks['feature_extractor'](data_x['verts'], data_x['faces'])  # [B, Nx, C]
-        feat_y = self.networks['feature_extractor'](data_y['verts'], data_y['faces'])  # [B, Ny, C]
+        feat_x = self.networks['feature_extractor'](data_x['verts'], data_x['faces'], feats=data_x['descr'] if 'descr' in data_x.keys() else None)  # [B, Nx, C]
+        feat_y = self.networks['feature_extractor'](data_y['verts'], data_y['faces'], feats=data_y['descr'] if 'descr' in data_y.keys() else None)  # [B, Ny, C]
 
         # get spectral operators
         evals_x = data_x['evals']
@@ -68,8 +68,8 @@ class FMNetModel(BaseModel):
             self.refine(data)
 
         # feature extractor
-        feat_x = self.networks['feature_extractor'](data_x['verts'], data_x.get('faces'))
-        feat_y = self.networks['feature_extractor'](data_y['verts'], data_y.get('faces'))
+        feat_x = self.networks['feature_extractor'](data_x['verts'], data_x.get('faces'), feats=data_x['descr'] if 'descr' in data_x.keys() else None)
+        feat_y = self.networks['feature_extractor'](data_y['verts'], data_y.get('faces'), feats=data_y['descr'] if 'descr' in data_y.keys() else None)
 
         # get spectral operators
         evecs_x = data_x['evecs'].squeeze()

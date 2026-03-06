@@ -129,7 +129,8 @@ def build_dataloader(dataset, dataset_opt, phase, num_gpu=1, dist=False, sampler
         dataloader_args['worker_init_fn'] = partial(
             worker_init_fn, num_workers=num_workers, rank=rank, seed=seed) if seed is not None else None
     elif phase in ['val', 'test']:  # validation
-        dataloader_args = dict(dataset=dataset, batch_size=1, shuffle=False, num_workers=2)
+        num_workers = dataset_opt['num_worker'] if 'num_worker' in dataset_opt.keys() else 0
+        dataloader_args = dict(dataset=dataset, batch_size=1, shuffle=False, num_workers=num_workers)
     else:
         raise ValueError(f'Wrong dataset phase: {phase}. ' "Supported ones are 'train', 'val' and 'test'.")
 
