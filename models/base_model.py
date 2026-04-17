@@ -38,7 +38,7 @@ class BaseModel:
              opt (dict): option dictionary contains all information related to model.
         """
         self.opt = opt
-        self.device = torch.device('cuda' if opt['num_gpu'] != 0 else 'cpu')
+        self.device = opt['device'] if 'device' in opt.keys() else torch.device('cuda' if opt['num_gpu'] != 0 else 'cpu')
         self.is_train = opt['is_train']
 
         # build networks
