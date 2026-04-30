@@ -117,8 +117,6 @@ class SingleShapeDataset(Dataset):
         basename = os.path.splitext(os.path.basename(off_file))[0]
         item['name'] = basename
 
-        print(f'LOADING: {index} -> {basename}')
-
         # get vertices and faces
         verts, faces = read_shape(off_file)
         item['verts'] = torch.from_numpy(verts).float()
@@ -640,5 +638,124 @@ class PairTopKidsDataset(Dataset):
             corr = np.loadtxt(self.corr_files[index], dtype=np.int32) - 1  # minus 1 to start from 0
             item['first']['corr'] = torch.from_numpy(corr).long()
             item['second']['corr'] = torch.arange(0, len(corr)).long()
+
+        return item
+
+@DATASET_REGISTRY.register()
+class SingleBeCoSDataset(SingleShapeDataset):
+    """Single-shape BeCoS dataset filtered by challenge and phase. Corr is pairwise, not per-shape."""
+
+    CHALLENGE_MAP = {'ff': 'full_full', 'pf': 'partial_full', 'pp': 'partial_partial'}
+
+    def __init__(self, data_root, challenge, phase,
+                 return_faces=True, return_evecs=True, num_evecs=200,
+                 return_dist=False, return_descr=False, descr_dir='descr'):
+        assert challenge in self.CHALLENGE_MAP, f'Invalid challenge: {challenge}'
+        assert phase in ['train', 'val', 'test'], f'Invalid phase: {phase}'
+        self.challenge = challenge
+        self.phase = phase
+        super().__init__(data_root, return_faces, return_evecs, num_evecs,
+                         return_corr=False, return_dist=return_dist,
+                         return_descr=return_descr, descr_dir=descr_dir)
+
+    def _init_data(self):
+        prefix = f'{self.challenge}_{self.phase}_'
+
+        off_path = os.path.join(self.data_root, 'off')
+        assert os.path.isdir(off_path), f'Missing off dir: {off_path}'
+        self.off_files = sorted([
+            f for f in glob(f'{off_path}/*.off')
+            if os.path.splitext(os.path.basename(f))[0].startswith(prefix)
+        ])
+
+        if self.return_dist:
+            dist_path = os.path.join(self.data_root, 'dist')
+            assert os.path.isdir(dist_path), f'Missing dist dir: {dist_path}'
+            self.dist_files = sorted([
+                f for f in glob(f'{dist_path}/*.mat')
+                if os.path.splitext(os.path.basename(f))[0].startswith(prefix)
+            ])
+
+        if self.return_descr:
+            descr_path = os.path.join(self.data_root, self.descr_dir)
+            assert os.path.isdir(descr_path), f'Missing descr dir: {descr_path}'
+            self.descr_files = sorted([
+                f for f in glob(f'{descr_path}/*.pt')
+                if os.path.splitext(os.path.basename(f))[0].startswith(prefix)
+            ])
+
+
+@DATASET_REGISTRY.register()
+class PairBeCoSDataset(Dataset):
+    """
+    Pair BeCoS Dataset.
+
+    Each item is a pair (first=target, second=source) derived from a corr file.
+    Corr file naming: corres_{challenge}_{phase}_{i}_{n_source}_{n_target}.npy
+    where corres[k] = target vertex index for source vertex k.
+    """
+
+    def __init__(self, data_root, challenge, phase,
+                 return_faces=True, return_evecs=True, num_evecs=200,
+                 return_corr=True, return_dist=False, return_descr=False, descr_dir='descr'):
+        self.dataset = SingleBeCoSDataset(data_root, challenge, phase,
+                                          return_faces, return_evecs, num_evecs,
+                                          return_dist, return_descr, descr_dir)
+        self.data_root = data_root
+        self.challenge = challenge
+        self.phase = phase
+        self.return_corr = return_corr
+
+        # build lookup: shape stem → dataset index
+        self.stem_to_idx = {
+            os.path.splitext(os.path.basename(f))[0]: i
+            for i, f in enumerate(self.dataset.off_files)
+        }
+
+        self.pairs = []   # list of (source_idx, target_idx, corr_path)
+        self._init_pairs()
+        assert len(self.pairs) > 0, f'No pairs found for challenge={challenge}, phase={phase}'
+
+    def _init_pairs(self):
+        corr_dir = os.path.join(self.data_root, 'corr')
+        assert os.path.isdir(corr_dir), f'Missing corr dir: {corr_dir}'
+        prefix = f'{self.challenge}_{self.phase}_'
+
+        for corr_file in sort_list(glob(os.path.join(corr_dir, f'corres_{prefix}*.npy'))):
+            stem = os.path.splitext(os.path.basename(corr_file))[0]
+            # stem: corres_{ch}_{phase}_{i}_{n_source}_{n_target}
+            rest = stem[len('corres_'):]          # {ch}_{phase}_{i}_{n_source}_{n_target}
+            _, _, i, n_src_tgt = rest.split('_', 3)
+            pair_prefix = f'{self.challenge}_{self.phase}_{i}_'
+            for s_src in self.stem_to_idx:
+                if not s_src.startswith(pair_prefix):
+                    continue
+                n_src = s_src[len(pair_prefix):]
+                if n_src_tgt.startswith(n_src + '_'):
+                    n_tgt = n_src_tgt[len(n_src) + 1:]
+                    s_tgt = f'{pair_prefix}{n_tgt}'
+                    if s_tgt in self.stem_to_idx:
+                        self.pairs.append((
+                            self.stem_to_idx[s_src],
+                            self.stem_to_idx[s_tgt],
+                            corr_file,
+                        ))
+                    break
+
+    def __len__(self):
+        return len(self.pairs)
+
+    def __getitem__(self, index):
+        source_idx, target_idx, corr_file = self.pairs[index]
+
+        item = {
+            'first': self.dataset[target_idx],   # target
+            'second': self.dataset[source_idx],  # source
+        }
+
+        if self.return_corr:
+            corr = np.load(corr_file)    # (N_source,) — values = target vertex indices
+            item['first']['corr'] = torch.from_numpy(corr).long()
+            item['second']['corr'] = torch.arange(len(corr)).long()
 
         return item
