@@ -529,7 +529,7 @@ class PairShrec16Dataset(Dataset):
             full_descr_path = os.path.join(data_root, 'null', descr_dir)
             assert os.path.isdir(full_descr_path), f'Invalid path {full_descr_path} without .pt files'
             for cat in self.categories:
-                descr_file = os.path.join(full_descr_path, f'{cat}.pt')
+                descr_file = os.path.join(full_descr_path, f'{cat}_descriptors.pt')
                 assert os.path.isfile(descr_file), f'Missing descriptor file {descr_file}'
                 self.full_descr_files[cat] = descr_file
 
