@@ -477,7 +477,8 @@ class PairShrec16Dataset(Dataset):
                  categories=None,
                  cut_type='cuts', return_faces=True,
                  return_evecs=True, num_evecs=200,
-                 return_corr=False, return_dist=False):
+                 return_corr=False, return_dist=False,
+                 return_descr=False, descr_dir='descr'):
         assert cut_type in ['cuts', 'holes'], f'Unrecognized cut type: {cut_type}'
 
         categories = self.categories if categories is None else categories
@@ -494,15 +495,19 @@ class PairShrec16Dataset(Dataset):
         self.return_evecs = return_evecs
         self.return_corr = return_corr
         self.return_dist = return_dist
+        self.return_descr = return_descr
+        self.descr_dir = descr_dir
         self.num_evecs = num_evecs
 
         # full shape files
         self.full_off_files = dict()
         self.full_dist_files = dict()
+        self.full_descr_files = dict()
 
         # partial shape files
         self.partial_off_files = dict()
         self.partial_corr_files = dict()
+        self.partial_descr_files = dict()
 
         # load full shape files
         off_path = os.path.join(data_root, 'null', 'off')
@@ -519,6 +524,14 @@ class PairShrec16Dataset(Dataset):
                 dist_file = os.path.join(dist_path, f'{cat}.mat')
                 assert os.path.isfile(dist_file)
                 self.full_dist_files[cat] = dist_file
+
+        if return_descr:
+            full_descr_path = os.path.join(data_root, 'null', descr_dir)
+            assert os.path.isdir(full_descr_path), f'Invalid path {full_descr_path} without .pt files'
+            for cat in self.categories:
+                descr_file = os.path.join(full_descr_path, f'{cat}.pt')
+                assert os.path.isfile(descr_file), f'Missing descriptor file {descr_file}'
+                self.full_descr_files[cat] = descr_file
 
         # load partial shape files
         self._size = 0
@@ -538,6 +551,14 @@ class PairShrec16Dataset(Dataset):
                 partial_corr_files = sorted(glob(os.path.join(corr_path, f'*{cat}*.vts')))
                 assert len(partial_corr_files) == len(self.partial_off_files[cat])
                 self.partial_corr_files[cat] = partial_corr_files
+
+        if self.return_descr:
+            partial_descr_path = os.path.join(data_root, cut_type, descr_dir)
+            assert os.path.isdir(partial_descr_path), f'Invalid path {partial_descr_path} without .pt files.'
+            for cat in self.categories:
+                partial_descr_files = sorted(glob(os.path.join(partial_descr_path, f'*{cat}*.pt')))
+                assert len(partial_descr_files) == len(self.partial_off_files[cat])
+                self.partial_descr_files[cat] = partial_descr_files
 
     def _get_category(self, index):
         assert index < len(self)
@@ -595,6 +616,11 @@ class PairShrec16Dataset(Dataset):
             corr = np.loadtxt(self.partial_corr_files[cat][index], dtype=np.int32) - 1
             full_data['corr'] = torch.from_numpy(corr).long()
             partial_data['corr'] = torch.arange(0, len(corr)).long()
+
+        # get descriptors
+        if self.return_descr:
+            full_data['descr'] = torch.load(self.full_descr_files[cat], map_location=lambda storage, loc: storage)
+            partial_data['descr'] = torch.load(self.partial_descr_files[cat][index], map_location=lambda storage, loc: storage)
 
         return {'first': full_data, 'second': partial_data}
 
