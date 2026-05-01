@@ -18,6 +18,11 @@ def sort_list(l):
     except AttributeError:
         return sorted(l)
 
+def natural_sort_list(l):
+    def key(s):
+        return [int(t) if t.isdigit() else t for t in re.split(r'(\d+)', os.path.basename(s))]
+    return sorted(l, key=key)
+
 
 def get_spectral_ops(item, num_evecs, cache_dir=None):
     if not os.path.isdir(cache_dir):
@@ -538,7 +543,7 @@ class PairShrec16Dataset(Dataset):
         off_path = os.path.join(data_root, cut_type, 'off')
         assert os.path.isdir(off_path), f'Invalid path {off_path} without .off files.'
         for cat in self.categories:
-            partial_off_files = sorted(glob(os.path.join(off_path, f'*{cat}*.off')))
+            partial_off_files = natural_sort_list(glob(os.path.join(off_path, f'*{cat}*.off')))
             assert len(partial_off_files) != 0
             self.partial_off_files[cat] = partial_off_files
             self._size += len(partial_off_files)
@@ -548,7 +553,7 @@ class PairShrec16Dataset(Dataset):
             corr_path = os.path.join(data_root, cut_type, 'corres')
             assert os.path.isdir(corr_path), f'Invalid path {corr_path} without .vts files.'
             for cat in self.categories:
-                partial_corr_files = sorted(glob(os.path.join(corr_path, f'*{cat}*.vts')))
+                partial_corr_files = natural_sort_list(glob(os.path.join(corr_path, f'*{cat}*.vts')))
                 assert len(partial_corr_files) == len(self.partial_off_files[cat])
                 self.partial_corr_files[cat] = partial_corr_files
 
@@ -556,7 +561,7 @@ class PairShrec16Dataset(Dataset):
             partial_descr_path = os.path.join(data_root, cut_type, descr_dir)
             assert os.path.isdir(partial_descr_path), f'Invalid path {partial_descr_path} without .pt files.'
             for cat in self.categories:
-                partial_descr_files = sorted(glob(os.path.join(partial_descr_path, f'*{cat}*.pt')))
+                partial_descr_files = natural_sort_list(glob(os.path.join(partial_descr_path, f'*{cat}*.pt')))
                 assert len(partial_descr_files) == len(self.partial_off_files[cat])
                 self.partial_descr_files[cat] = partial_descr_files
 
