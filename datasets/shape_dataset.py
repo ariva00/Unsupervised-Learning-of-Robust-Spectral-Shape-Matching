@@ -618,14 +618,14 @@ class PairShrec16Dataset(Dataset):
 
         # get correspondences
         if self.return_corr:
-            corr = np.loadtxt(self.partial_corr_files[cat][index], dtype=np.int32) - 1
+            corr = np.loadtxt(self.partial_corr_files[cat][index]).astype(np.int32) - 1
             full_data['corr'] = torch.from_numpy(corr).long()
             partial_data['corr'] = torch.arange(0, len(corr)).long()
 
         # get descriptors
         if self.return_descr:
-            full_data['descr'] = torch.load(self.full_descr_files[cat], map_location=lambda storage, loc: storage)
-            partial_data['descr'] = torch.load(self.partial_descr_files[cat][index], map_location=lambda storage, loc: storage)
+            full_data['descr'] = torch.load(self.full_descr_files[cat], map_location=lambda storage, loc: storage).float()
+            partial_data['descr'] = torch.load(self.partial_descr_files[cat][index], map_location=lambda storage, loc: storage).float()
 
         return {'first': full_data, 'second': partial_data}
 
